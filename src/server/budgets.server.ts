@@ -1,5 +1,6 @@
 import { and, asc, count, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 import { db as defaultDb, schema } from "#/db";
+import { budgetStatus } from "#/lib/budgets";
 import { getEntitlements } from "#/server/billing.server";
 
 //
@@ -9,9 +10,6 @@ import { getEntitlements } from "#/server/billing.server";
 // write path that changes a transaction is reflected without bookkeeping.
 
 type Db = typeof defaultDb;
-
-/** Postgres `integer` upper bound — `limit_minor` is an int4 column. */
-export const MAX_LIMIT_MINOR = 2_147_483_647;
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -197,8 +195,7 @@ export async function listBudgetViews(
       ...budget,
       spent_minor: spent,
       remaining_minor: budget.limit_minor - spent,
-      // Strictly greater: spending exactly the limit is still on budget.
-      over_budget: spent > budget.limit_minor,
+      over_budget: budgetStatus(spent, budget.limit_minor) === "over",
     };
   });
 }

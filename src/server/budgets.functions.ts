@@ -3,9 +3,9 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "#/db";
 import type { BudgetErrorCode, BudgetErrorResult } from "#/lib/budget-errors";
+import { MAX_LIMIT_MINOR } from "#/lib/budgets";
 import { getEntitlements } from "#/server/billing.server";
 import {
-  MAX_LIMIT_MINOR,
   currentUtcMonth,
   insertBudgetWithinLimit,
   listAccountCurrencies,

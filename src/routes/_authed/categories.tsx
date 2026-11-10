@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { m } from "#/paraglide/messages";
+import { buildCategoryTree, type CategoryTreeNode } from "#/lib/category-tree";
 import { EditButton, DeleteButton } from "#/components/ui/action-buttons";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -40,42 +41,7 @@ export const Route = createFileRoute("/_authed/categories")({
   component: CategoriesPage,
 });
 
-type CategoryNode = CategoryRow & {
-  children: CategoryNode[];
-};
-
-function buildCategoryTree(categories: CategoryRow[]): CategoryNode[] {
-  const map = new Map<string, CategoryNode>();
-  const roots: CategoryNode[] = [];
-
-  // Create all nodes first
-  for (const cat of categories) {
-    map.set(cat.id, { ...cat, children: [] });
-  }
-
-  // Build tree structure
-  for (const cat of categories) {
-    const node = map.get(cat.id)!;
-    if (cat.parent_id) {
-      const parent = map.get(cat.parent_id);
-      if (parent) {
-        parent.children.push(node);
-      } else {
-        roots.push(node);
-      }
-    } else {
-      roots.push(node);
-    }
-  }
-
-  // Sort roots and children by sort_order
-  roots.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  for (const node of map.values()) {
-    node.children.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  }
-
-  return roots;
-}
+type CategoryNode = CategoryTreeNode<CategoryRow>;
 
 function getTopLevelCategories(categories: CategoryRow[]): CategoryRow[] {
   return categories.filter((c) => c.parent_id === null);

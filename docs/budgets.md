@@ -39,6 +39,11 @@ category, not per account).
 | Remove is a hard delete; alert rows are kept | Consistent with every other entity in the repo; kept alerts preserve "one email per month" if the budget is recreated | Soft delete (every query must filter it, breaks the unique constraint, compliance overhead) |
 | Budget currency must be one of the user's account currencies | Otherwise the budget could never count anything | Free-text currency |
 | Every budgets failure returns a stable `code` (`src/lib/budget-errors.ts`); the UI maps codes to Paraglide messages with a generic fallback | Raw server/DB text never reaches the user; user-facing copy lives in `messages/en.json`. The catalog is in `src/lib` because routes cannot import `*.server.ts` | Rendering `result.error` as-is (what `accounts`/`categories` do without a code) |
+| Card colour: green below 80% of the limit, orange from 80% up to the limit, red when over | Gives a warning before the limit; rules live in `src/lib/budgets.ts`, integer math only, shared by the UI and tests | Two states only (on/over) |
+| "Add budget" stays enabled at the plan cap; the page shows "N of 3 used" and an upgrade link, and a server rejection shows a toast | The server stays the single source of truth for the cap (another tab or a downgrade can change it) | Hiding or disabling the button as the only guard |
+| Minimal page-local toast instead of a toast library | The repo has no toast system; one consumer does not justify a new dependency | Adding `sonner` |
+| A server rejection closes the dialog before the toast shows | The modal marks the rest of the page `aria-hidden`; closing it keeps the toast visible to screen readers and refetches fresh data | Keeping the dialog open under the toast |
+| Already-budgeted categories stay in the select, disabled | Their children keep their context in the indented list | Removing them from the list |
 
 ## Assumptions
 
@@ -86,4 +91,26 @@ category, not per account).
 - **Step 3 — Error contract.** Added `src/lib/budget-errors.ts` (error codes +
   `budgetErrorMessage`) and all budgets copy to `messages/en.json`; every
   failure from `budgets.functions.ts` now carries a code. Verified with a unit
-  test that unknown codes fall back to a generic message.
+  test that unknown codes fall back to a generic message. Added limit
+  validation tests: positive accepted; negative, zero, a fraction of a minor
+  unit and a numeric string rejected.
+- **Step 4 — UI.** `src/routes/_authed/budgets.tsx`: one card per budget with
+  spent / limit / left, a progress bar coloured by status (`src/lib/budgets.ts`,
+  unit-tested at 79.9%, 80%, 100% and 100% + 1), "Near limit" / "Over budget"
+  badges, add/edit dialog (indented category list, currency of the user's
+  accounts, edit = limit only), remove confirmation, plan usage with an upgrade
+  link at the cap, a toast for server rejections, empty states; "Budgets" added
+  to the sidebar after Categories. `MAX_LIMIT_MINOR` moved to `src/lib` so the
+  form can validate it. Verified manually in the browser (create, validation,
+  green/orange/red, edit, remove, 4th budget on free shows the toast);
+  typecheck, lint and unit tests green.
+- **Step 4b — Reuse and split.** Moved `buildCategoryTree` out of the
+  categories page into `src/lib/category-tree.ts` and reused it for the budget
+  form (no third copy of the tree code). The hand-made bar became the
+  shadcn/Radix `Progress` (`src/components/ui/progress.tsx`). The page was split
+  into `components/budgets/budget-card.tsx` (presentational: title, colour,
+  currency, spent, limit, optional actions), `components/budgets/budget-form.tsx`
+  and a generic `components/ui/toast.tsx`. The server now derives `over_budget`
+  from the same `budgetStatus` rule. Vitest got its own Vite `cacheDir`: its
+  config differs from dev, and a shared cache broke a running dev server with
+  `getRequest is not a function`. 223 unit tests, typecheck and lint green.
