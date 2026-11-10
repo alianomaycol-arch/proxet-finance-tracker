@@ -52,7 +52,9 @@ log (`EMAIL_PROVIDER=console`); to really send one, start the server with
   emails. It is checked after creating or editing a transaction, confirming an
   import, and creating or editing a budget, plus an hourly sweep.
 - Compliance: budgets and the alert log are part of the data export
-  (`export.json` and `budgets.csv`), and the privacy copy mentions them.
+  (`export.json` and `budgets.csv`) and are removed by account deletion;
+  deleting a category also removes its budget. The privacy, export and
+  account-deleted copy mention them.
 - Tests: unit and database tests (`tests/budgets.test.ts`,
   `tests/budget-alerts.test.ts`, `tests/unit/budget-status.test.ts`, the
   export test) and Playwright E2E tests (`tests/e2e/budgets.spec.ts`). Run
@@ -70,9 +72,6 @@ log (`EMAIL_PROVIDER=console`); to really send one, start the server with
 
 **With more time**
 
-- Delete a category's budgets and alerts when the category is deleted, and
-  include both tables in the account hard delete (today both fail with a
-  foreign-key error when a budget exists).
 - Budget history (versioned limits) and month navigation.
 - Release stale `pending` alert claims, or move alerts to a job queue.
 - Unique category names, which also closes the rename gap for budget names.

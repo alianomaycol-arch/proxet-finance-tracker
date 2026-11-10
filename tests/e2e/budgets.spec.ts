@@ -127,6 +127,33 @@ test.describe("budgets page", () => {
   });
 });
 
+test.describe("budgets and category deletion", () => {
+  test("deleting a category also removes its budget", async ({
+    page,
+    signedInUser: _signedInUser,
+  }) => {
+    await page.goto("/budgets");
+    await addBudget(page, "Housing", "100");
+    await expect(budgetCard(page, "Housing")).toBeVisible();
+
+    await page.goto("/categories");
+    await page
+      .getByTestId("category-row")
+      .filter({ hasText: "Housing" })
+      .first()
+      .getByTestId("delete-category")
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "Delete Category" })
+      .getByRole("button", { name: "Delete" })
+      .click();
+    await expect(page.locator("main").getByText("Housing")).toBeHidden();
+
+    await page.goto("/budgets");
+    await expect(page.getByText("No budgets yet")).toBeVisible();
+  });
+});
+
 test.describe("budget limit gating", () => {
   test("free users get 3 budgets and are blocked with an upgrade hint on the fourth", async ({
     page,

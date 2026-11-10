@@ -300,6 +300,14 @@ export const deleteCategory = createServerFn({ method: "POST" })
       .set({ category_id: null })
       .where(inArray(schema.receipt_items.category_id, allIdsToDelete));
 
+    // Delete budgets (and their alert log) on any of these categories
+    await db
+      .delete(schema.budget_alerts)
+      .where(inArray(schema.budget_alerts.category_id, allIdsToDelete));
+    await db
+      .delete(schema.budgets)
+      .where(inArray(schema.budgets.category_id, allIdsToDelete));
+
     // Delete categorization_rules that reference any of these categories
     await db
       .delete(schema.categorization_rules)
