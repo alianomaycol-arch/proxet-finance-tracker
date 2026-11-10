@@ -99,6 +99,23 @@ test.describe("budgets page", () => {
     await expect(page.getByText("No budgets yet")).toBeVisible();
   });
 
+  test("rejects a zero limit with a validation error", async ({
+    page,
+    signedInUser: _signedInUser,
+  }) => {
+    await page.goto("/budgets");
+    await page.getByRole("button", { name: "Add budget" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add budget" });
+    await dialog.getByLabel("Category").selectOption({ label: "Groceries" });
+    await dialog.getByLabel("Monthly limit").fill("0");
+    await dialog.getByRole("button", { name: "Add budget" }).click();
+
+    await expect(dialog.getByRole("alert")).toHaveText(
+      "Enter an amount greater than zero.",
+    );
+    await expect(page.getByTestId("budget-card")).toHaveCount(0);
+  });
+
   test("marks a budget over its limit and emails the owner once", async ({
     page,
     signedInUser,

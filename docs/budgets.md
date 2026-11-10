@@ -170,3 +170,11 @@ category, not per account).
   Verified: the compliance seed includes a budget and an alert, so the hard
   delete and sweep tests cover them, and a new E2E test deletes a budgeted
   category.
+- **Step 9 — Missing edge and outside cases.** The update and delete queries
+  moved to `updateOwnedBudgetLimit` / `deleteOwnedBudget` in
+  `budgets.server.ts` (same `id` + `user_id` query) so they can be tested
+  without a request. New tests: another user can't change or remove a
+  budget, and the owner can; `MAX_LIMIT_MINOR` is accepted and one more is
+  rejected; the strict update schema rejects a category or currency; E2E for
+  a zero limit showing the validation error. 234 unit tests and the budgets
+  E2E spec green.

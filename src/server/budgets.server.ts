@@ -303,3 +303,31 @@ export async function insertBudgetWithinLimit(
     return { ok: true, budget };
   });
 }
+
+/** Change a budget's limit. False when the budget is missing or not the user's. */
+export async function updateOwnedBudgetLimit(
+  userId: string,
+  id: string,
+  limitMinor: number,
+  db: Db = defaultDb,
+): Promise<boolean> {
+  const updated = await db
+    .update(schema.budgets)
+    .set({ limit_minor: limitMinor, updated_at: new Date() })
+    .where(and(eq(schema.budgets.id, id), eq(schema.budgets.user_id, userId)))
+    .returning({ id: schema.budgets.id });
+  return updated.length > 0;
+}
+
+/** Remove a budget. False when the budget is missing or not the user's. */
+export async function deleteOwnedBudget(
+  userId: string,
+  id: string,
+  db: Db = defaultDb,
+): Promise<boolean> {
+  const deleted = await db
+    .delete(schema.budgets)
+    .where(and(eq(schema.budgets.id, id), eq(schema.budgets.user_id, userId)))
+    .returning({ id: schema.budgets.id });
+  return deleted.length > 0;
+}

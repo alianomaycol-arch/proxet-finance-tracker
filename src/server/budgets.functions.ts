@@ -1,16 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, schema } from "#/db";
 import type { BudgetErrorCode, BudgetErrorResult } from "#/lib/budget-errors";
 import { MAX_LIMIT_MINOR } from "#/lib/budgets";
 import { getEntitlements } from "#/server/billing.server";
 import { triggerBudgetAlerts } from "#/server/budget-alerts.server";
 import {
   currentUtcMonth,
+  deleteOwnedBudget,
   insertBudgetWithinLimit,
   listAccountCurrencies,
   listBudgetViews,
+  updateOwnedBudgetLimit,
 } from "#/server/budgets.server";
 import { ownedEntityExists } from "#/server/ownership.server";
 import { requireUserId } from "#/server/session";
@@ -31,7 +31,7 @@ const createBudgetSchema = z.object({
 
 // Strict: only the limit is editable. Sending a category or currency is a
 // validation error rather than being silently ignored.
-const updateBudgetSchema = z.strictObject({
+export const updateBudgetSchema = z.strictObject({
   id: z.string().min(1),
   limitMinor: limitMinorSchema,
 });
@@ -93,17 +93,7 @@ export const updateBudget = createServerFn({ method: "POST" })
   .inputValidator(updateBudgetSchema)
   .handler(async ({ data }) => {
     const userId = await requireUserId();
-    const updated = await db
-      .update(schema.budgets)
-      .set({ limit_minor: data.limitMinor, updated_at: new Date() })
-      .where(
-        and(
-          eq(schema.budgets.id, data.id),
-          eq(schema.budgets.user_id, userId),
-        ),
-      )
-      .returning({ id: schema.budgets.id });
-    if (updated.length === 0) {
+    if (!(await updateOwnedBudgetLimit(userId, data.id, data.limitMinor))) {
       return failure("budget_not_found", "Budget not found");
     }
     triggerBudgetAlerts(userId);
@@ -116,16 +106,7 @@ export const deleteBudget = createServerFn({ method: "POST" })
     const userId = await requireUserId();
     // Alert rows are kept on purpose: they are keyed by category and month,
     // so deleting and recreating a budget cannot send a second email.
-    const deleted = await db
-      .delete(schema.budgets)
-      .where(
-        and(
-          eq(schema.budgets.id, data.id),
-          eq(schema.budgets.user_id, userId),
-        ),
-      )
-      .returning({ id: schema.budgets.id });
-    if (deleted.length === 0) {
+    if (!(await deleteOwnedBudget(userId, data.id))) {
       return failure("budget_not_found", "Budget not found");
     }
     return { success: true };
