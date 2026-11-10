@@ -7,13 +7,19 @@ import { db, schema } from "../src/db/index.ts";
 import {
   collectSubtree,
   currentUtcMonth,
+  deleteOwnedBudget,
   insertBudgetWithinLimit,
   listAccountCurrencies,
   listBudgetViews,
   monthRange,
   rollUpSpend,
+  updateOwnedBudgetLimit,
 } from "../src/server/budgets.server.ts";
-import { limitMinorSchema } from "../src/server/budgets.functions.ts";
+import {
+  limitMinorSchema,
+  updateBudgetSchema,
+} from "../src/server/budgets.functions.ts";
+import { MAX_LIMIT_MINOR } from "../src/lib/budgets.ts";
 import { env } from "../src/server/env.ts";
 
 describe("budget month helpers", () => {
@@ -41,6 +47,29 @@ describe("budget limit validation", () => {
     ["a numeric string", "3000"],
   ])("rejects %s", (_label, value) => {
     expect(limitMinorSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("accepts the maximum limit and rejects one minor unit more", () => {
+    expect(limitMinorSchema.safeParse(MAX_LIMIT_MINOR).success).toBe(true);
+    expect(limitMinorSchema.safeParse(MAX_LIMIT_MINOR + 1).success).toBe(false);
+  });
+});
+
+describe("budget update schema", () => {
+  it("accepts the id and a new limit", () => {
+    expect(
+      updateBudgetSchema.safeParse({ id: "b1", limitMinor: 100 }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["the category", { categoryId: "other-category" }],
+    ["the currency", { currency: "USD" }],
+  ])("rejects changing %s", (_label, extra) => {
+    expect(
+      updateBudgetSchema.safeParse({ id: "b1", limitMinor: 100, ...extra })
+        .success,
+    ).toBe(false);
   });
 });
 
@@ -250,5 +279,42 @@ describe("budget spend and creation (database)", () => {
       ),
     );
     expect(results.filter((r) => r.ok)).toHaveLength(env.billing.freeMaxBudgets);
+  });
+
+  it("lets only the owner change or remove a budget", async () => {
+    const otherUserId = "budgets-other-user";
+    await db.insert(schema.users).values({
+      id: otherUserId,
+      username: otherUserId,
+      password_hash: "x",
+    });
+    try {
+      const created = await insertBudgetWithinLimit(userId, {
+        categoryId: "bt-food",
+        currency: "PLN",
+        limitMinor: 100,
+      });
+      if (!created.ok) throw new Error("budget setup failed");
+      const { id } = created.budget;
+      const limitOf = async () =>
+        (
+          await db
+            .select({ limit: schema.budgets.limit_minor })
+            .from(schema.budgets)
+            .where(eq(schema.budgets.id, id))
+        )[0]?.limit;
+
+      expect(await updateOwnedBudgetLimit(otherUserId, id, 999)).toBe(false);
+      expect(await deleteOwnedBudget(otherUserId, id)).toBe(false);
+      expect(await limitOf()).toBe(100);
+
+      expect(await updateOwnedBudgetLimit(userId, id, 250)).toBe(true);
+      expect(await limitOf()).toBe(250);
+      expect(await deleteOwnedBudget(userId, id)).toBe(true);
+      expect(await limitOf()).toBeUndefined();
+      expect(await deleteOwnedBudget(userId, id)).toBe(false);
+    } finally {
+      await db.delete(schema.users).where(eq(schema.users.id, otherUserId));
+    }
   });
 });
