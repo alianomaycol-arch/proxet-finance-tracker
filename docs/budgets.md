@@ -33,6 +33,12 @@ category, not per account).
 | Over budget = spent > limit (strictly) | Spending exactly the limit is on budget | `>=` |
 | One email per budget per month is enforced by a unique DB constraint `(user_id, category_id, month)` + `ON CONFLICT DO NOTHING` | Safe under concurrent requests; same idempotency pattern as `stripe_events`. Keyed by category so deleting and recreating a budget does not re-send | In-memory flag; keying by budget id |
 | Plan cap enforced on the server; downgrades keep existing budgets | Mirrors `checkAccountLimit`; UI gating alone can be bypassed | UI-only gate; deleting extra budgets on downgrade |
+| Count + insert in one transaction holding a `FOR UPDATE` lock on the user row | Concurrent creates cannot exceed the cap (covered by a test) | Check-then-insert without a lock |
+| Only the limit is editable; `updateBudget` uses `z.strictObject` | Changing the category or currency is a different budget; sending them is a validation error, not silently ignored | Editable category/currency |
+| Limit: integer minor units, `1..2147483647` | Must be > 0; upper bound is the Postgres `integer` column | Floats; unbounded |
+| Remove is a hard delete; alert rows are kept | Consistent with every other entity in the repo; kept alerts preserve "one email per month" if the budget is recreated | Soft delete (every query must filter it, breaks the unique constraint, compliance overhead) |
+| Budget currency must be one of the user's account currencies | Otherwise the budget could never count anything | Free-text currency |
+| Every budgets failure returns a stable `code` (`src/lib/budget-errors.ts`); the UI maps codes to Paraglide messages with a generic fallback | Raw server/DB text never reaches the user; user-facing copy lives in `messages/en.json`. The catalog is in `src/lib` because routes cannot import `*.server.ts` | Rendering `result.error` as-is (what `accounts`/`categories` do without a code) |
 
 ## Assumptions
 
@@ -52,6 +58,8 @@ category, not per account).
   timezone; optional per-account budgets.
 - Alert evaluation through a job queue or outbox instead of inline
   fire-and-forget.
+- Apply the error-code catalog repo-wide: other modules still show the
+  server's English `error` text when there is no `code`.
 
 ## Implementation log
 
@@ -65,3 +73,17 @@ category, not per account).
   month, with a limit/spent snapshot) to `schema.ts`; migration
   `drizzle/0004_*` generated with `pnpm run db:generate`. Verified with the
   startup-migration test and typecheck.
+- **Step 2 — Spend calculation and CRUD.** `budgets.server.ts`: pure helpers
+  (`monthRange`, `collectSubtree`, `rollUpSpend`) plus one aggregate query, and
+  `insertBudgetWithinLimit` (plan cap under a row lock). `budgets.functions.ts`:
+  `getBudgets`, `createBudget`, `updateBudget` (limit only, strict schema),
+  `deleteBudget`, all scoped by `user_id` in the same query. Entitlements gain
+  `maxBudgets` (`BILLING_FREE_MAX_BUDGETS`, default 3); `budget` added to
+  `OWNED_TABLES`, which the cross-tenant test now covers. Verified with
+  `tests/budgets.test.ts` (roll-up, refunds, month bounds, currency, cycles,
+  duplicate, plan cap, concurrency): 210 unit tests green, typecheck and lint
+  clean.
+- **Step 3 — Error contract.** Added `src/lib/budget-errors.ts` (error codes +
+  `budgetErrorMessage`) and all budgets copy to `messages/en.json`; every
+  failure from `budgets.functions.ts` now carries a code. Verified with a unit
+  test that unknown codes fall back to a generic message.
