@@ -56,6 +56,10 @@ category, not per account).
 
 ## Possible improvements (with more time)
 
+- **Known gap — deletion order**: delete a category's `budget_alerts` and
+  `budgets` before the category in `deleteCategory`, and add both tables to
+  `hardDeleteUser`. Today both fail with a foreign-key error when a budget
+  exists, which also blocks the deletion sweep for that user.
 - **Budget history**: versioned limits
   (`budget_limits(budget_id, effective_month, limit_minor)`) plus month
   navigation, so past months keep the limit they had.
@@ -145,3 +149,19 @@ category, not per account).
   `tests/budget-alerts.test.ts` (one email when going over, none on a second
   expense the same month, none at the limit, waits for verification, alerts
   again next month); typecheck and lint green.
+- **Step 6 — Data export.** `collectUserExport` now includes `budgets` and
+  `budgetAlerts`, and the zip has a `budgets.csv` (category name, currency,
+  limit). The export and privacy copy mention budgets. Verified by extending
+  the export test in `tests/compliance.test.ts`. Not done: `deleteCategory`
+  and `hardDeleteUser` don't remove `budgets` / `budget_alerts` yet, so both
+  fail with a foreign-key error when a budget exists (the account-deleted
+  email copy was left unchanged for that reason).
+- **Step 7 — E2E and README.** `tests/e2e/budgets.spec.ts`: sidebar link and
+  empty state; create, edit and remove; over-budget card plus exactly one
+  alert email (`/test-emails`, still one after a second expense and
+  `/test-run-sweep`); free cap of 3 with the toast and upgrade link; Pro
+  creates a fourth. README section for the feature; `.env.example` documents
+  `BILLING_FREE_MAX_BUDGETS` and the email variables. On a UTC-3 machine one
+  existing test (`transactions-list.spec.ts`, "Jan 15, 2025") fails because
+  the transaction list shows dates in local time; it passes with `TZ=UTC` and
+  is unrelated to budgets.
