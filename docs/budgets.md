@@ -56,10 +56,6 @@ category, not per account).
 
 ## Possible improvements (with more time)
 
-- **Known gap — deletion order**: delete a category's `budget_alerts` and
-  `budgets` before the category in `deleteCategory`, and add both tables to
-  `hardDeleteUser`. Today both fail with a foreign-key error when a budget
-  exists, which also blocks the deletion sweep for that user.
 - **Budget history**: versioned limits
   (`budget_limits(budget_id, effective_month, limit_minor)`) plus month
   navigation, so past months keep the limit they had.
@@ -165,3 +161,12 @@ category, not per account).
   existing test (`transactions-list.spec.ts`, "Jan 15, 2025") fails because
   the transaction list shows dates in local time; it passes with `TZ=UTC` and
   is unrelated to budgets.
+- **Step 8 — Deletion keeps working with budgets.** Without this, deleting a
+  category with a budget, or deleting an account that has budgets, failed
+  with a foreign-key error (the task requires not breaking existing
+  features). `deleteCategory` now removes the `budget_alerts` and `budgets`
+  of the deleted categories, and `hardDeleteUser` removes both tables before
+  `categories`. The account-deleted email copy now mentions budgets.
+  Verified: the compliance seed includes a budget and an alert, so the hard
+  delete and sweep tests cover them, and a new E2E test deletes a budgeted
+  category.
