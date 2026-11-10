@@ -109,10 +109,20 @@ describe("compliance: CSV writer", () => {
 
 describe("compliance: data export", () => {
   const userId = "export-test-user";
-  afterEach(() => wipeUser(userId));
+  afterEach(async () => {
+    await db.delete(schema.budgets).where(eq(schema.budgets.user_id, userId));
+    await wipeUser(userId);
+  });
 
   it("builds a zip with export.json, CSVs, and receipt images", async () => {
     await seedFullUser(userId);
+    await db.insert(schema.budgets).values({
+      id: `${userId}-budget`,
+      user_id: userId,
+      category_id: `${userId}-cat`,
+      currency: "PLN",
+      limit_minor: 30000,
+    });
     const zip = await buildExportZip(userId);
     const files = unzipSync(zip);
 
@@ -124,6 +134,8 @@ describe("compliance: data export", () => {
     expect(json.receipts[0].items).toHaveLength(1);
     expect(json.receipts[0].image_file).toBe(`receipts/${userId}-rcpt.jpg`);
     expect(json.categorizationRules).toHaveLength(1);
+    expect(json.budgets).toHaveLength(1);
+    expect(json.budgetAlerts).toEqual([]);
     expect(json.subscription.plan).toBe("free");
 
     const txnCsv = strFromU8(files["transactions.csv"]);
@@ -134,6 +146,9 @@ describe("compliance: data export", () => {
     expect(strFromU8(files["accounts.csv"])).toContain('"Checking"');
     expect(strFromU8(files["categories.csv"])).toContain('"Groceries"');
     expect(strFromU8(files["categorization_rules.csv"])).toContain('"grocery"');
+    const budgetsCsv = strFromU8(files["budgets.csv"]);
+    expect(budgetsCsv).toContain('"Groceries"');
+    expect(budgetsCsv).toContain('"300.00"');
 
     expect(Array.from(files[`receipts/${userId}-rcpt.jpg`])).toEqual([
       0xff, 0xd8, 0xff, 0x42,
