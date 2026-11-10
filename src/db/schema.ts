@@ -9,6 +9,7 @@ import {
   doublePrecision,
   serial,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export const auth_token_type = pgEnum("auth_token_type", [
@@ -25,6 +26,10 @@ export const ai_usage_kind = pgEnum("ai_usage_kind", [
   "categorize",
 ]);
 export const subscription_plan = pgEnum("subscription_plan", ["free", "pro"]);
+export const budget_alert_status = pgEnum("budget_alert_status", [
+  "pending",
+  "sent",
+]);
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -205,6 +210,67 @@ export const categorization_rules = pgTable(
   },
   (t) => [
     index("categorization_rules_user_priority_idx").on(t.user_id, t.priority),
+  ],
+);
+
+// Monthly spending limit per category. Spend is never stored — it is computed
+// from transactions for the requested month (see budgets.server.ts).
+export const budgets = pgTable(
+  "budgets",
+  {
+    id: text("id").primaryKey(),
+    user_id: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    category_id: text("category_id")
+      .notNull()
+      .references(() => categories.id),
+    // ISO 4217 code; only transactions on accounts in this currency count.
+    currency: text("currency").notNull(),
+    // Integer minor units (grosze/cents) — never store money as floats.
+    limit_minor: integer("limit_minor").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique("budgets_user_category_uq").on(t.user_id, t.category_id)],
+);
+
+// Over-budget email ledger — the idempotency guarantee for "max one email per
+// budget per month". A row is claimed with ON CONFLICT DO NOTHING before the
+// email is sent. Keyed by category (not budget id) so deleting and recreating
+// a budget in the same month cannot send a second email.
+export const budget_alerts = pgTable(
+  "budget_alerts",
+  {
+    id: text("id").primaryKey(),
+    user_id: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    category_id: text("category_id")
+      .notNull()
+      .references(() => categories.id),
+    // UTC calendar month, 'YYYY-MM'.
+    month: text("month").notNull(),
+    status: budget_alert_status("status").notNull().default("pending"),
+    // Snapshot at the time of the alert, so past months keep a record of the
+    // limit that was exceeded.
+    limit_minor: integer("limit_minor").notNull(),
+    spent_minor: integer("spent_minor").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    sent_at: timestamp("sent_at", { withTimezone: true, mode: "date" }),
+  },
+  (t) => [
+    unique("budget_alerts_user_category_month_uq").on(
+      t.user_id,
+      t.category_id,
+      t.month,
+    ),
   ],
 );
 

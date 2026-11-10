@@ -10,6 +10,9 @@ import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 
 const config = defineConfig({
+  // The plugin config differs under vitest, so a shared cache makes each run
+  // re-optimize deps under a running dev server and break its SSR modules.
+  cacheDir: process.env.VITEST ? "node_modules/.vite-vitest" : undefined,
   resolve: { tsconfigPaths: true },
   plugins: [
     devtools(),
