@@ -1,3 +1,5 @@
+import { getLocale } from "#/paraglide/runtime";
+
 //
 // Client-safe budget rules shared by the server functions and the budgets
 // page. Amounts are integer minor units, so comparisons stay in integers.
@@ -27,4 +29,21 @@ export function budgetUsagePercent(
 ): number {
   if (limitMinor <= 0) return 0;
   return Math.min(100, Math.floor((spentMinor * 100) / limitMinor));
+}
+
+/**
+ * Budget names (category names) must be unique per user, compared trimmed and
+ * case-insensitively — the same rule as `lower(trim(name))` on the server.
+ */
+export function budgetNameKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/** 'YYYY-MM' as a localized month, e.g. "November 2026". Budget months are UTC. */
+export function formatBudgetMonth(month: string): string {
+  return new Date(`${month}-01T00:00:00Z`).toLocaleDateString(getLocale(), {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }

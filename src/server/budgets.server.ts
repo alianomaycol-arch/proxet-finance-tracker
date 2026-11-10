@@ -232,9 +232,11 @@ export type CreateBudgetResult =
     };
 
 /**
- * Insert a budget unless the category already has one or the plan cap is
- * reached. The count and the insert run in one transaction holding a lock on
- * the user's row, so concurrent creates cannot exceed the cap. Existing
+ * Insert a budget unless a category with the same name (trimmed,
+ * case-insensitive) already has one, or the plan cap is reached. Budgets are
+ * shown by category name, and category names are not unique (e.g. "Groceries"
+ * under two parents). The checks and the insert run in one transaction holding
+ * a lock on the user's row, so concurrent creates cannot bypass them. Existing
  * budgets above the cap (after a downgrade) are kept — only creating new ones
  * is blocked, as for accounts.
  */
@@ -254,10 +256,17 @@ export async function insertBudgetWithinLimit(
     const existing = await tx
       .select({ id: schema.budgets.id })
       .from(schema.budgets)
+      .innerJoin(
+        schema.categories,
+        eq(schema.categories.id, schema.budgets.category_id),
+      )
       .where(
         and(
           eq(schema.budgets.user_id, userId),
-          eq(schema.budgets.category_id, input.categoryId),
+          sql`lower(trim(${schema.categories.name})) = (
+            SELECT lower(trim(c.name)) FROM categories c
+            WHERE c.id = ${input.categoryId} AND c.user_id = ${userId}
+          )`,
         ),
       )
       .limit(1);
@@ -265,7 +274,7 @@ export async function insertBudgetWithinLimit(
       return {
         ok: false,
         code: "budget_exists",
-        error: "This category already has a budget.",
+        error: "A budget with this name already exists.",
       };
     }
 

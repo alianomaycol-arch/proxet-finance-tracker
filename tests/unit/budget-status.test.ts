@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { budgetStatus, budgetUsagePercent } from "#/lib/budgets";
+import {
+  budgetNameKey,
+  budgetStatus,
+  budgetUsagePercent,
+} from "#/lib/budgets";
 
 describe("budgetStatus", () => {
   it.each([
@@ -18,5 +22,12 @@ describe("budgetUsagePercent", () => {
     expect(budgetUsagePercent(0, 1000)).toBe(0);
     expect(budgetUsagePercent(799, 1000)).toBe(79);
     expect(budgetUsagePercent(1500, 1000)).toBe(100);
+  });
+});
+
+describe("budgetNameKey", () => {
+  it("ignores case and surrounding spaces", () => {
+    expect(budgetNameKey(" Groceries ")).toBe(budgetNameKey("groceries"));
+    expect(budgetNameKey("Food")).not.toBe(budgetNameKey("Fun"));
   });
 });

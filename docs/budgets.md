@@ -44,6 +44,10 @@ category, not per account).
 | Minimal page-local toast instead of a toast library | The repo has no toast system; one consumer does not justify a new dependency | Adding `sonner` |
 | A server rejection closes the dialog before the toast shows | The modal marks the rest of the page `aria-hidden`; closing it keeps the toast visible to screen readers and refetches fresh data | Keeping the dialog open under the toast |
 | Already-budgeted categories stay in the select, disabled | Their children keep their context in the indented list | Removing them from the list |
+| Alert = claim a `budget_alerts` row (`ON CONFLICT DO NOTHING RETURNING`), then send; on send failure the claim is deleted | The claim makes concurrent triggers send at most once; deleting it on failure lets a later trigger retry instead of losing the month's email | Send first, then record (a crash or race can send twice) |
+| Alerts are triggered fire-and-forget after creating/editing a transaction, confirming an import and creating/editing a budget; an hourly sweep (`maintenance.server.ts`) covers the other write paths | The write never waits for or fails because of email; same pattern as the password reset email. The sweep catches receipts, categorization rules, category moves and account currency changes without hooking every path | Hooking every write path (more code, easy to miss one); sweep only (up to 1 h delay) |
+| Only verified email addresses get alerts, and an unverified user does not use up the month's alert | Avoids mailing addresses the user has not confirmed; the alert still goes out once they verify | Mailing any stored address |
+| Budget names are unique per user: two categories with the same name (trimmed, case-insensitive) cannot both have a budget | A budget is shown by its category name, and category names are not unique (e.g. "Groceries" under two parents), so two identical cards would be ambiguous. Checked inside the same locked transaction as the plan cap; the form disables matching categories | A DB constraint (the name lives on `categories`); showing the full category path instead |
 
 ## Assumptions
 
@@ -62,9 +66,16 @@ category, not per account).
 - Receipt-item split parity with the dashboard; FX conversion; per-user
   timezone; optional per-account budgets.
 - Alert evaluation through a job queue or outbox instead of inline
-  fire-and-forget.
+  fire-and-forget. A process crash between the claim and the send leaves a
+  `pending` row that blocks that month's email; the sweep could release
+  stale `pending` claims.
 - Apply the error-code catalog repo-wide: other modules still show the
   server's English `error` text when there is no `code`.
+- **Unique category names**: the categories module accepts two categories
+  with the same name (also at the same level), and a rename can still produce
+  two budgets with the same name. Validate `lower(trim(name))` per user and
+  parent in `createCategory`/`updateCategory` (or a unique index on that
+  expression), which would also close the rename gap for budgets.
 
 ## Implementation log
 
@@ -114,3 +125,23 @@ category, not per account).
   from the same `budgetStatus` rule. Vitest got its own Vite `cacheDir`: its
   config differs from dev, and a shared cache broke a running dev server with
   `getRequest is not a function`. 223 unit tests, typecheck and lint green.
+- **Step 4c — Unique budget names.** `insertBudgetWithinLimit` now rejects a
+  budget when any budgeted category has the same name
+  (`lower(trim(name))`), which also covers the same category; the error code
+  stays `budget_exists`. The form disables categories whose name is taken
+  (`budgetNameKey` in `src/lib/budgets.ts`). Verified with a database test
+  (" groceries " under another parent is rejected), a unit test for the
+  helper, and in the browser ("food" disabled once "Food" has a budget).
+  Known gap: renaming a category can still produce two budgets with the same
+  name.
+- **Step 5 — Over-budget email.** `src/server/budget-alerts.server.ts`:
+  `evaluateBudgetAlerts` (verified email only, claim then send, release on
+  failure, `spent_minor` clamped to int4), `triggerBudgetAlerts`
+  (fire-and-forget) wired into `createTransaction`, `updateTransaction`,
+  import confirm, `createBudget` and `updateBudget`, and
+  `runBudgetAlertSweep` in the hourly maintenance loop and `/test-run-sweep`.
+  The email copy is in `messages/en.json`; `formatBudgetMonth` moved to
+  `src/lib/budgets.ts` so the page and the email share it. Verified with
+  `tests/budget-alerts.test.ts` (one email when going over, none on a second
+  expense the same month, none at the limit, waits for verification, alerts
+  again next month); typecheck and lint green.

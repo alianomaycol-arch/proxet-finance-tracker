@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { m } from "#/paraglide/messages";
-import { MAX_LIMIT_MINOR } from "#/lib/budgets";
+import { budgetNameKey, MAX_LIMIT_MINOR } from "#/lib/budgets";
 import { buildCategoryTree, type CategoryTreeNode } from "#/lib/category-tree";
 import { minorToInputValue, parseAmountToMinor } from "#/lib/money";
 import { Button } from "#/components/ui/button";
@@ -41,9 +41,13 @@ interface EditableBudget {
 function toSelectOptions(
   nodes: CategoryTreeNode<CategoryOption>[],
   depth = 0,
-): { id: string; label: string }[] {
+): { id: string; name: string; label: string }[] {
   return nodes.flatMap((node) => [
-    { id: node.id, label: `${"— ".repeat(depth)}${node.name}` },
+    {
+      id: node.id,
+      name: node.name,
+      label: `${"— ".repeat(depth)}${node.name}`,
+    },
     ...toSelectOptions(node.children, depth + 1),
   ]);
 }
@@ -86,11 +90,17 @@ export function BudgetForm({
     }
   }, [isOpen, editingBudget, defaultCurrency]);
 
-  // Budgeted categories stay listed (disabled) so their children keep context.
+  // Categories whose name already has a budget stay listed (disabled) so their
+  // children keep context.
   const options = toSelectOptions(buildCategoryTree(categories));
-  const noCategoryLeft =
-    !editingBudget &&
-    options.every((option) => budgetedCategoryIds.has(option.id));
+  const budgetedNames = new Set(
+    categories
+      .filter((category) => budgetedCategoryIds.has(category.id))
+      .map((category) => budgetNameKey(category.name)),
+  );
+  const isTaken = (option: { name: string }) =>
+    budgetedNames.has(budgetNameKey(option.name));
+  const noCategoryLeft = !editingBudget && options.every(isTaken);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,7 +153,7 @@ export function BudgetForm({
                     <SelectItem
                       key={option.id}
                       value={option.id}
-                      disabled={budgetedCategoryIds.has(option.id)}
+                      disabled={isTaken(option)}
                     >
                       {option.label}
                     </SelectItem>

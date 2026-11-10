@@ -5,6 +5,7 @@ import { db, schema } from "#/db";
 import type { BudgetErrorCode, BudgetErrorResult } from "#/lib/budget-errors";
 import { MAX_LIMIT_MINOR } from "#/lib/budgets";
 import { getEntitlements } from "#/server/billing.server";
+import { triggerBudgetAlerts } from "#/server/budget-alerts.server";
 import {
   currentUtcMonth,
   insertBudgetWithinLimit,
@@ -84,6 +85,7 @@ export const createBudget = createServerFn({ method: "POST" })
       const { ok: _ok, ...error } = result;
       return error;
     }
+    triggerBudgetAlerts(userId);
     return result.budget;
   });
 
@@ -104,6 +106,7 @@ export const updateBudget = createServerFn({ method: "POST" })
     if (updated.length === 0) {
       return failure("budget_not_found", "Budget not found");
     }
+    triggerBudgetAlerts(userId);
     return { success: true };
   });
 

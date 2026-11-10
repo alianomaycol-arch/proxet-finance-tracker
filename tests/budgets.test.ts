@@ -187,6 +187,24 @@ describe("budget spend and creation (database)", () => {
     expect(duplicate).toMatchObject({ ok: false, code: "budget_exists" });
   });
 
+  it("rejects a budget for another category with the same name, ignoring case and spaces", async () => {
+    await db.insert(schema.categories).values({
+      id: "bt-home-groceries",
+      user_id: userId,
+      name: " groceries ",
+      parent_id: "bt-home",
+    });
+    const base = { currency: "PLN", limitMinor: 100 };
+    expect(
+      (await insertBudgetWithinLimit(userId, { ...base, categoryId: "bt-groceries" })).ok,
+    ).toBe(true);
+    const duplicate = await insertBudgetWithinLimit(userId, {
+      ...base,
+      categoryId: "bt-home-groceries",
+    });
+    expect(duplicate).toMatchObject({ ok: false, code: "budget_exists" });
+  });
+
   it("caps free users at the plan limit and lets pro users go beyond it", async () => {
     const categories = ["bt-food", "bt-fun", "bt-travel", "bt-home"];
     for (const categoryId of categories.slice(0, env.billing.freeMaxBudgets)) {

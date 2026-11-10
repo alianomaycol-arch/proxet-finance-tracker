@@ -3,8 +3,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 import { m } from "#/paraglide/messages";
-import { getLocale } from "#/paraglide/runtime";
 import { budgetErrorMessage } from "#/lib/budget-errors";
+import { formatBudgetMonth } from "#/lib/budgets";
 import { BudgetCard } from "#/components/budgets/budget-card";
 import {
   BudgetForm,
@@ -38,14 +38,6 @@ export const Route = createFileRoute("/_authed/budgets")({
 
 const BUDGETS_QUERY_KEY = ["budgets"] as const;
 const CATEGORIES_QUERY_KEY = ["categories"] as const;
-
-function formatMonth(month: string): string {
-  return new Date(`${month}-01T00:00:00Z`).toLocaleDateString(getLocale(), {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 function BudgetsPage() {
   const queryClient = useQueryClient();
@@ -198,7 +190,7 @@ function BudgetsPage() {
             {/* Month and plan usage */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="font-medium">
-                {m.budgets_month({ month: formatMonth(data.month) })}
+                {m.budgets_month({ month: formatBudgetMonth(data.month) })}
               </span>
               <span
                 className="flex items-center gap-3 text-muted-foreground"
