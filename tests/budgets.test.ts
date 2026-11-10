@@ -13,6 +13,7 @@ import {
   monthRange,
   rollUpSpend,
 } from "../src/server/budgets.server.ts";
+import { limitMinorSchema } from "../src/server/budgets.functions.ts";
 import { env } from "../src/server/env.ts";
 
 describe("budget month helpers", () => {
@@ -25,6 +26,21 @@ describe("budget month helpers", () => {
     expect(monthRange("2026-02")).toEqual({ start: "2026-02-01", end: "2026-03-01" });
     expect(monthRange("2026-12")).toEqual({ start: "2026-12-01", end: "2027-01-01" });
     expect(() => monthRange("2026-13")).toThrow(/Invalid month/);
+  });
+});
+
+describe("budget limit validation", () => {
+  it("accepts a positive whole number of minor units", () => {
+    expect(limitMinorSchema.safeParse(3000).success).toBe(true);
+  });
+
+  it.each([
+    ["a negative amount", -100],
+    ["zero", 0],
+    ["a fraction of a minor unit", 12.5],
+    ["a numeric string", "3000"],
+  ])("rejects %s", (_label, value) => {
+    expect(limitMinorSchema.safeParse(value).success).toBe(false);
   });
 });
 

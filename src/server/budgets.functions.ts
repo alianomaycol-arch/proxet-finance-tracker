@@ -14,7 +14,7 @@ import {
 import { ownedEntityExists } from "#/server/ownership.server";
 import { requireUserId } from "#/server/session";
 
-const limitMinorSchema = z
+export const limitMinorSchema = z
   .number()
   .int("Limit must be a whole number of minor units")
   .positive("Limit must be greater than zero")
